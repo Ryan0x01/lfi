@@ -3,18 +3,15 @@ import os
 import subprocess
 import logging
 import concurrent.futures
+import shutil
 from pathlib import Path
 from rich.console import Console
 from rich.progress import Progress
 
 
-
-
 # Setup logging
 logging.basicConfig(filename='lfi_scanner.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 console = Console()
-
-
 
 
 # Argument Parser
@@ -27,25 +24,35 @@ def get_args():
     return parser.parse_args()
 
 
-
-
 # Run ParamSpider to identify parameters
 def run_paramspider(domain):
-    # Adjusted for available arguments in ParamSpider
-    command = f"paramspider -d {domain} > params.txt"
-    logging.info(f"Running ParamSpider for {domain}")
+    # Create the results directory if it doesn't exist
+    results_dir = "results"
+    os.makedirs(results_dir, exist_ok=True)
+    
+    # Define the output file path within the results directory
+    result_file = os.path.join(results_dir, f"{domain.replace('https://', '').replace('http://', '').replace('/', '_')}.txt")
+    
+    # Command to run ParamSpider and save results to the specific file
+    command = f"paramspider -d {domain} > {result_file}"
+    logging.info(f"Running ParamSpider for {domain} and saving results to {result_file}")
     subprocess.run(command, shell=True)
-
-
+    return result_file
 
 
 # Filter parameters using gf
-def filter_params():
-    command = "gf lfi params.txt > filtered_params.txt"
-    logging.info("Filtering parameters using gf tool")
+def filter_params(result_file):
+    # Create the vet directory if it doesn't exist
+    vet_dir = "vet"
+    os.makedirs(vet_dir, exist_ok=True)
+    
+    # Define the vetted parameters file within the vet directory
+    vet_file = os.path.join(vet_dir, "filtered_params.txt")
+    
+    command = f"gf lfi {result_file} > {vet_file}"
+    logging.info(f"Filtering parameters using gf tool and saving to {vet_file}")
     subprocess.run(command, shell=True)
-
-
+    return vet_file
 
 
 # Test for LFI vulnerabilities using Feroxbuster
@@ -55,8 +62,6 @@ def run_feroxbuster(domain, param, payload):
     logging.info(f"Running Feroxbuster for {url}")
     subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return parse_feroxbuster_output("feroxbuster_output.txt")
-
-
 
 
 # Parse Feroxbuster output and check for LFI
@@ -71,8 +76,6 @@ def parse_feroxbuster_output(file_path):
     return valid_urls
 
 
-
-
 # Simple LFI confirmation based on common patterns
 def check_lfi(url):
     try:
@@ -85,15 +88,16 @@ def check_lfi(url):
     return False
 
 
-
-
 # Main LFI Scanning Logic
 def scan_lfi(domains, payloads, output_file, threads):
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
         for domain in domains:
-            run_paramspider(domain)
-            filter_params()
-            params = [line.strip() for line in open("filtered_params.txt")]
+            # Run ParamSpider and filter parameters
+            result_file = run_paramspider(domain)
+            vet_file = filter_params(result_file)
+            
+            # Load parameters
+            params = [line.strip() for line in open(vet_file)]
             future_to_url = {
                 executor.submit(run_feroxbuster, domain, param, payload): (domain, param, payload)
                 for param in params for payload in payloads
@@ -110,8 +114,11 @@ def scan_lfi(domains, payloads, output_file, threads):
                 for result in valid_lfi_results:
                     f.write(f"{result}\n")
             logging.info(f"Results written to {output_file}")
-
-
+            
+            # Clean up temporary files and directories
+            shutil.rmtree("results")
+            shutil.rmtree("vet")
+            os.remove("feroxbuster_output.txt")
 
 
 # Main Function
@@ -120,8 +127,6 @@ def main():
     domains = [line.strip() for line in open(args.domains_file)]
     payloads = [line.strip() for line in open(args.payloads_file)]
     scan_lfi(domains, payloads, args.output_file, args.threads)
-
-
 
 
 if __name__ == "__main__":
