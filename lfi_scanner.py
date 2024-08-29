@@ -10,6 +10,8 @@ from rich.progress import Progress
 
 # Setup logging
 logging.basicConfig(filename='lfi_scanner.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
 console = Console()
 
 
@@ -25,9 +27,9 @@ def get_args():
 
 # Run ParamSpider to identify parameters
 def run_paramspider(domain):
-    command = f"paramspider -d {domain} --level 2 --exclude static --output params.txt"
+    command = ["python3", "ParamSpider/paramspider.py", "-d", domain, "--level", "2", "--exclude", "static", "--output", "params.txt"]
     logging.info(f"Running ParamSpider for {domain}")
-    subprocess.run(command, shell=True)
+    subprocess.run(command)
 
 
 # Filter parameters using gf
@@ -51,8 +53,8 @@ def parse_feroxbuster_output(file_path):
     valid_urls = []
     with open(file_path, "r") as file:
         for line in file:
-            if "200" in line:  # Check only for 200 OK responses
-                url = line.split()[0]  # Assuming the URL is the first part of the output
+            if "200" in line:
+                url = line.split()[0]
                 if check_lfi(url):
                     valid_urls.append(url)
     return valid_urls
@@ -77,10 +79,7 @@ def scan_lfi(domains, payloads, output_file, threads):
             run_paramspider(domain)
             filter_params()
             params = [line.strip() for line in open("filtered_params.txt")]
-            future_to_url = {
-                executor.submit(run_feroxbuster, domain, param, payload): (domain, param, payload)
-                for param in params for payload in payloads
-            }
+            future_to_url = {executor.submit(run_feroxbuster, domain, param, payload): (domain, param, payload) for param in params for payload in payloads}
             valid_lfi_results = []
             with Progress(console=console) as progress:
                 task = progress.add_task("[cyan]Testing for LFI...", total=len(future_to_url))
