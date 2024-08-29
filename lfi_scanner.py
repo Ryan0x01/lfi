@@ -30,8 +30,9 @@ def run_paramspider(domain):
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
     
-    # Define the output file path within the results directory
-    result_file = os.path.join(results_dir, f"{domain.replace('https://', '').replace('http://', '').replace('/', '_')}.txt")
+    # Sanitize domain name for the file path
+    sanitized_domain = domain.replace('https://', '').replace('http://', '').replace('/', '_')
+    result_file = os.path.join(results_dir, f"{sanitized_domain}.txt")
     
     # Command to run ParamSpider and save results to the specific file
     command = f"paramspider -d {domain} > {result_file}"
@@ -67,12 +68,13 @@ def run_feroxbuster(domain, param, payload):
 # Parse Feroxbuster output and check for LFI
 def parse_feroxbuster_output(file_path):
     valid_urls = []
-    with open(file_path, "r") as file:
-        for line in file:
-            if "200" in line:  # Check only for 200 OK responses
-                url = line.split()[0]  # Assuming the URL is the first part of the output
-                if check_lfi(url):
-                    valid_urls.append(url)
+    if os.path.exists(file_path):
+        with open(file_path, "r") as file:
+            for line in file:
+                if "200" in line:  # Check only for 200 OK responses
+                    url = line.split()[0]  # Assuming the URL is the first part of the output
+                    if check_lfi(url):
+                        valid_urls.append(url)
     return valid_urls
 
 
@@ -118,7 +120,8 @@ def scan_lfi(domains, payloads, output_file, threads):
             # Clean up temporary files and directories
             shutil.rmtree("results")
             shutil.rmtree("vet")
-            os.remove("feroxbuster_output.txt")
+            if os.path.exists("feroxbuster_output.txt"):
+                os.remove("feroxbuster_output.txt")
 
 
 # Main Function
