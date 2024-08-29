@@ -31,7 +31,8 @@ def get_args():
 
 # Run ParamSpider to identify parameters
 def run_paramspider(domain):
-    command = f"paramspider -d {domain} --level 2 --exclude static --output params.txt"
+    # Adjusted for available arguments in ParamSpider
+    command = f"paramspider -d {domain} > params.txt"
     logging.info(f"Running ParamSpider for {domain}")
     subprocess.run(command, shell=True)
 
